@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  atlassian-proxy:
+    # 使用GitHub Packages中的镜像
+    # 请将 'your-username' 替换为您的GitHub用户名
+    image: ghcr.io/your-username/atlassian_docker:latest
+    
+    # 或者使用本地构建的镜像
+    # build: .
+    
+    container_name: atlassian-proxy
+    
+    ports:
+      - "8000:8000"
+    
+    volumes:
+      # 数据持久化 - 将SQLite数据库存储在主机上
+      - ./data:/app/data
+      
+    environment:
+      # 生产模式
+      - GIN_MODE=release
+      # 端口配置
+      - PORT=8000
+      
+    restart: unless-stopped
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+      
+    # 资源限制（可选）
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+# 可选：添加网络配置
+networks:
+  default:
+    name: atlassian-proxy-network

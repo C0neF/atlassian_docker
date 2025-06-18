@@ -164,6 +164,116 @@ To enable debug mode for verbose logging, set `DebugMode = true` in `config.go`.
 
 The application uses an SQLite database (`.credentials.db`) to store credentials, API tokens, and admin passwords.
 
+## Docker部署 | Docker Deployment
+
+### 使用Docker构建和运行 | Build and Run with Docker
+
+#### 本地构建Docker镜像 | Build Docker Image Locally
+```bash
+# 构建镜像
+docker build -t atlassian-proxy .
+
+# 运行容器
+docker run -d \
+  --name atlassian-proxy \
+  -p 8000:8000 \
+  -v $(pwd)/data:/app/data \
+  atlassian-proxy
+```
+
+#### 使用GitHub Packages中的镜像 | Use Image from GitHub Packages
+```bash
+# 拉取最新镜像
+docker pull ghcr.io/your-username/atlassian_docker:latest
+
+# 运行容器
+docker run -d \
+  --name atlassian-proxy \
+  -p 8000:8000 \
+  -v $(pwd)/data:/app/data \
+  ghcr.io/your-username/atlassian_docker:latest
+```
+
+#### Docker Compose部署 | Docker Compose Deployment
+创建`docker-compose.yml`文件：
+```yaml
+version: '3.8'
+services:
+  atlassian-proxy:
+    image: ghcr.io/your-username/atlassian_docker:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - GIN_MODE=release
+      - PORT=8000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+```
+
+运行：
+```bash
+docker-compose up -d
+```
+
+### 环境变量 | Environment Variables
+
+- `PORT`: 服务器端口（默认：8000）| Server port (default: 8000)
+- `GIN_MODE`: Gin框架模式（release/debug）| Gin framework mode (release/debug)
+
+### 数据持久化 | Data Persistence
+
+应用程序使用SQLite数据库存储数据。为了保持数据持久化，请确保将`/app/data`目录挂载到主机：
+
+The application uses SQLite database for data storage. To persist data, make sure to mount the `/app/data` directory to the host:
+
+```bash
+-v $(pwd)/data:/app/data
+```
+
+## CI/CD | Continuous Integration/Deployment
+
+### GitHub Actions自动构建 | GitHub Actions Auto Build
+
+项目配置了GitHub Actions工作流程，会在以下情况自动构建和发布Docker镜像：
+
+The project is configured with GitHub Actions workflow that automatically builds and publishes Docker images when:
+
+- 推送到`main`或`master`分支 | Push to `main` or `master` branch
+- 创建新的版本标签（如`v1.0.0`）| Create new version tags (e.g., `v1.0.0`)
+- 创建Pull Request | Create Pull Request
+
+### 镜像标签策略 | Image Tagging Strategy
+
+- `latest`: 最新的main/master分支构建 | Latest main/master branch build
+- `v1.0.0`: 特定版本标签 | Specific version tags
+- `main`: main分支的最新构建 | Latest build from main branch
+- `pr-123`: Pull Request构建 | Pull Request builds
+
+### 使用发布的镜像 | Using Published Images
+
+镜像发布到GitHub Container Registry (ghcr.io)：
+
+Images are published to GitHub Container Registry (ghcr.io):
+
+```bash
+# 拉取最新版本
+docker pull ghcr.io/your-username/atlassian_docker:latest
+
+# 拉取特定版本
+docker pull ghcr.io/your-username/atlassian_docker:v1.0.0
+```
+
+**注意**: 请将`your-username`替换为您的GitHub用户名或组织名。
+
+**Note**: Replace `your-username` with your GitHub username or organization name.
+
 ## 许可证 | License
 
 本项目按原样提供，仅供教育和开发目的使用。

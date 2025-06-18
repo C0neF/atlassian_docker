@@ -1,0 +1,89 @@
+name: 构建并发布Docker镜像
+
+# 触发条件
+on:
+  # 推送到main分支时触发
+  push:
+    branches: [ "main", "master" ]
+    # 当有标签推送时也触发
+    tags: [ 'v*.*.*' ]
+  # 推送到Pull Request时触发
+  pull_request:
+    branches: [ "main", "master" ]
+  # 允许手动触发
+  workflow_dispatch:
+
+env:
+  # 使用docker.io作为默认注册表
+  REGISTRY: ghcr.io
+  # github.repository格式为 <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # 这是用来完成身份验证的 `id-token: write`
+      id-token: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3.1.1
+        with:
+          cosign-release: 'v2.1.1'
+
+      - name: 设置Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录到Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 提取元数据（标签、标签）
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # 设置latest标签为默认分支
+            type=ref,event=branch
+            type=ref,event=pr
+            # 为标签设置版本标签
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # 为默认分支设置latest标签
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: 构建并推送Docker镜像
+        id: build-and-push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 使用cosign对容器镜像进行签名
+      # https://github.com/sigstore/cosign
+      - name: 使用cosign签名发布的Docker镜像
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+        # 此步骤使用GitHub的OIDC令牌进行签名，该令牌仅在此工作流程中可用。
+        run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
