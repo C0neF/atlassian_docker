@@ -4,8 +4,14 @@ FROM golang:1.24.1-alpine AS builder
 # 设置工作目录
 WORKDIR /app
 
-# 安装必要的包
-RUN apk add --no-cache git ca-certificates tzdata
+# 安装必要的包，包括编译工具和SQLite开发库
+RUN apk add --no-cache \
+    git \
+    ca-certificates \
+    tzdata \
+    gcc \
+    musl-dev \
+    sqlite-dev
 
 # 复制go mod文件
 COPY go.mod go.sum ./
@@ -24,7 +30,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o main .
 FROM alpine:latest
 
 # 安装必要的运行时依赖
-RUN apk --no-cache add ca-certificates tzdata sqlite
+RUN apk --no-cache add ca-certificates tzdata sqlite curl
 
 # 创建非root用户
 RUN addgroup -g 1001 -S appgroup && \
@@ -52,7 +58,7 @@ ENV PORT=8000
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/health || exit 1
 
 # 启动应用程序
 CMD ["./main"]
