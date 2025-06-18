@@ -36,7 +36,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: sigstore/cosign-installer@v3.1.1
         with:
-          cosign-release: 'v2.1.1'
+          cosign-release: 'v2.4.0'
 
       - name: 设置Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -77,10 +77,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # 使用cosign对容器镜像进行签名
+      # 使用cosign对容器镜像进行签名（可选步骤，失败时不影响整体流程）
       # https://github.com/sigstore/cosign
       - name: 使用cosign签名发布的Docker镜像
         if: ${{ github.event_name != 'pull_request' }}
+        continue-on-error: true
         env:
           # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
           TAGS: ${{ steps.meta.outputs.tags }}
